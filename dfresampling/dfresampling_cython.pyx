@@ -2,6 +2,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from libc.math cimport sin, cos, atan2, sqrt, ceil, round
+import sys
 
 cdef double pi = np.pi
 
@@ -75,7 +76,7 @@ cdef double hanning_filter(double x, double y) nogil:
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-def map_coordinates(double[:,:] source, double[:,:] target, Ci):
+def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_width=-1):
     cdef np.ndarray[np.float64_t, ndim=3] pixel_target = np.zeros((target.shape[0], target.shape[1], 2))
     # Offset in x direction
     cdef np.ndarray[np.float64_t, ndim=3] offset_target_x = np.zeros((target.shape[0], target.shape[1]+1, 2))
@@ -132,6 +133,9 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci):
                 weight_sum = 0.0
 
                 samples_width = <int>(4*ceil(max(s_padded[0], s_padded[1])))
+                if max_samples_width > 0 and samples_width > max_samples_width:
+                    target[yi,xi] = 0.0/0.0
+                    continue
                 for yoff in range(samples_width/2, -samples_width/2, -1):
                     current_offset[1] = yoff
                     current_pixel_source[1] = round(pixel_source[yi,xi,1] + yoff)
@@ -152,3 +156,7 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci):
                         weight_sum += weight
                         target[yi,xi] += weight * source[<int>current_pixel_source[1],<int>current_pixel_source[0]]
                 target[yi,xi] *= det2x2(Ji) / weight_sum
+            with gil:
+                sys.stdout.write("\r%d/%d done" % (yi+1, pixel_target.shape[0]))
+                sys.stdout.flush()
+    sys.stdout.write("\n")
