@@ -4,7 +4,7 @@ from Cython.Distutils import build_ext
 import numpy as np
 
 ext  =  [
-    Extension("dfresampling_cython", sources=["dfresampling_cython.pyx"])
+    Extension("dfresampling.dfresampling_cython", sources=["dfresampling/dfresampling_cython.pyx"])
 ]
 
 setup(
