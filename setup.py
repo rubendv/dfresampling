@@ -4,12 +4,14 @@ from Cython.Distutils import build_ext
 import numpy as np
 
 ext  =  [
-    Extension("dfresampling.dfresampling_cython", sources=["dfresampling/dfresampling_cython.pyx"])
+    Extension("dfresampling.map_coordinates", sources=["dfresampling/map_coordinates.pyx"])
 ]
 
 setup(
-   name = "extensions", 
+   name = "dfresampling", 
+   version = "0.1",
+   author = "Ruben De Visscher",
    cmdclass={'build_ext' : build_ext}, 
    include_dirs = [np.get_include()],   
    ext_modules=ext
-   )
+)
