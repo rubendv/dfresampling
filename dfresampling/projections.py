@@ -41,6 +41,16 @@ def convert_cartesian_to_polar(cartesian):
     polar[...,1] = np.arctan2(cartesian[...,1], cartesian[...,0])
     return polar
 
+def convert_hg_to_hpc(b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg):
+    hpc = np.zeros_like(hg)
+    hpc[...,0], hpc[...,1] = sunpy.wcs.convert_hg_hpc(hg[...,0], hg[...,1], b0_deg, l0_deg, dsun_meters, angle_units, occultation)
+    return hpc
+
+def convert_hpc_to_hg(b0_deg, l0_deg, dsun_meters, angle_units, hpc):
+    hg = np.zeros_like(hpc)
+    hg[...,0], hg[...,1] = sunpy.wcs.convert_hpc_hg(hpc[...,0], hpc[...,1], b0_deg, l0_deg, dsun_meters, angle_units)
+    return hg
+
 def compose(*functions):
     return reduce(lambda f, g: lambda x: f(g(x)), functions)
 
@@ -48,4 +58,16 @@ def convert_polar_pixel_to_hpc_pixel(polar_shape, max_radius, scale, reference_p
     return compose(partial(convert_hpc_to_pixel, scale, reference_pixel, reference_coordinate), convert_polar_to_cartesian, partial(convert_range, (0, polar_shape[1]), (0, max_radius), (0, polar_shape[0]), (-np.pi, np.pi)))(polar_pixel)
 
 def convert_hpc_pixel_to_polar_pixel(polar_shape, max_radius, scale, reference_pixel, reference_coordinate, hpc_pixel):
-    return compose(partial(convert_range, (0, max_radius), (0, polar_shape[1]), (-np.pi, pi), (0, polar_shape[0])), convert_cartesion_to_polar, partial(convert_pixel_to_hpc, scale, reference_pixel, reference_coordinate))(hpc_pixel)
+    return compose(partial(convert_range, (0, max_radius), (0, polar_shape[1]), (-np.pi, np.pi), (0, polar_shape[0])), convert_cartesian_to_polar, partial(convert_pixel_to_hpc, scale, reference_pixel, reference_coordinate))(hpc_pixel)
+
+def convert_hpc_pixel_to_hg_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, hpc_pixel):
+    return compose(\
+            partial(convert_range, longitude_range, (0, hg_shape[1]), latitude_range, (0, hg_shape[0])), \
+            partial(convert_hpc_to_hg, b0_deg, l0_deg, dsun_meters, angle_units), \
+            partial(convert_pixel_to_hpc, scale, reference_pixel, reference_coordinate))(hpc_pixel)
+
+def convert_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg_pixel):
+    return compose(\
+            partial(convert_hpc_to_pixel, scale, reference_pixel, reference_coordinate), \
+            partial(convert_hg_to_hpc, b0_deg, l0_deg, dsun_meters, angle_units, occultation), \
+            partial(convert_range, (0, hg_shape[1]), longitude_range, (0, hg_shape[0]), latitude_range))(hg_pixel)

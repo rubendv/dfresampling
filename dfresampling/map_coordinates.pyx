@@ -1,10 +1,14 @@
 import numpy as np
 cimport numpy as np
 cimport cython
-from libc.math cimport sin, cos, atan2, sqrt, ceil, round, exp, fabs
+from libc.math cimport sin, cos, atan2, sqrt, floor, ceil, round, exp, fabs
 import sys
 
 cdef double pi = np.pi
+cdef double nan = np.nan
+
+cdef extern from "math.h":
+    int isnan(double x) nogil
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -83,7 +87,81 @@ cdef double gaussian_filter(double x, double y) nogil:
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_width=-1, int conserve_flux=True, int progress=True):
+cdef double clip(double x, double vmin, double vmax, int cyclic) nogil:
+    if x < vmin:
+        if cyclic:
+            while x < vmin:
+                x += (vmax-vmin)+1
+        else:
+            return vmin
+    elif x > vmax:
+        if cyclic:
+            while x > vmax:
+                x -= (vmax-vmin)+1
+        else:
+            return vmax
+    else:
+        return x
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef double bilinear_interpolation(double[:,:] source, double x, double y, int x_cyclic, int y_cyclic) nogil:
+    x = clip(x, 0, source.shape[1]-1, x_cyclic)
+    y = clip(y, 0, source.shape[0]-1, y_cyclic)
+    cdef double floored_x = clip(floor(x), 0, source.shape[1]-1, x_cyclic)
+    cdef double floored_y = clip(floor(y), 0, source.shape[0]-1, y_cyclic)
+    cdef double ceiled_x = clip(ceil(x), 0, source.shape[1]-1, x_cyclic)
+    cdef double ceiled_y = clip(ceil(y), 0, source.shape[0]-1, y_cyclic)
+    cdef double Q11_x = floored_x
+    cdef double Q11_y = floored_y
+    cdef double Q21_x = ceiled_x
+    cdef double Q21_y = floored_y
+    cdef double Q12_x = floored_x
+    cdef double Q12_y = ceiled_y
+    cdef double Q22_x = ceiled_x
+    cdef double Q22_y = ceiled_y
+    cdef double fQ11 = source[<int>Q11_y,<int>Q11_x]
+    cdef double fQ21 = source[<int>Q21_y,<int>Q21_x]
+    cdef double fQ12 = source[<int>Q12_y,<int>Q12_x]
+    cdef double fQ22 = source[<int>Q22_y,<int>Q22_x]
+    return (fQ11 * (ceiled_x - x) * (ceiled_y - y) + fQ21 * (x - floored_x) * (ceiled_y - y) + fQ12 * (ceiled_x - x) * (y - floored_y) + fQ22 * (x - floored_x) * (y - floored_y)) * ((ceiled_x - floored_x) * (ceiled_y - floored_y))
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef double nearest_neighbour_interpolation(double[:,:] source, double x, double y, int x_cyclic, int y_cyclic) nogil:
+    return source[<int>clip(round(y), 0, source.shape[0]-1, y_cyclic), <int>clip(round(x), 0, source.shape[1]-1, x_cyclic)]
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+def map_coordinates_direct(double[:,:] source, double[:,:] target, Ci, int x_cyclic=False, int y_cyclic=False):
+    cdef np.ndarray[np.float64_t, ndim=3] pixel_target = np.zeros((target.shape[0], target.shape[1], 2))
+    cdef int yi, xi
+    for yi in range(target.shape[0]):
+        for xi in range(target.shape[1]):
+            pixel_target[yi,xi,0] = xi
+            pixel_target[yi,xi,1] = yi
+
+    cdef np.ndarray[np.float64_t, ndim=3] pixel_source = Ci(pixel_target)
+
+    with nogil:
+        for yi in range(pixel_target.shape[0]):
+            for xi in range(pixel_target.shape[1]):
+                if isnan(pixel_source[yi,xi,0]) or isnan(pixel_source[yi,xi,1]):
+                    target[yi,xi] = nan
+                    continue
+                target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic)
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_width=-1, int conserve_flux=False, int progress=False, int singularities_nan=False, int x_cyclic=False, int y_cyclic=False):
     cdef np.ndarray[np.float64_t, ndim=3] pixel_target = np.zeros((target.shape[0], target.shape[1], 2))
     # Offset in x direction
     cdef np.ndarray[np.float64_t, ndim=3] offset_target_x = np.zeros((target.shape[0], target.shape[1]+1, 2))
@@ -128,6 +206,9 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_
                 Ji[0,1] = offset_source_x[yi,xi,1] - offset_source_x[yi,xi+1,1]
                 Ji[1,0] = offset_source_y[yi,xi,0] - offset_source_y[yi+1,xi,0]
                 Ji[1,1] = offset_source_y[yi,xi,1] - offset_source_y[yi+1,xi,1]
+                if isnan(Ji[0,0]) or isnan(Ji[0,1]) or isnan(Ji[1,0]) or isnan(Ji[1,1]) or isnan(pixel_source[yi,xi,0]) or isnan(pixel_source[yi,xi,1]):
+                    target[yi,xi] = nan
+                    continue
 
                 svd2x2_decompose(Ji, U, s, V)
                 s_padded[0] = max(1.0, s[0])
@@ -138,30 +219,25 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_
 
                 target[yi,xi] = 0.0
                 weight_sum = 0.0
-
+                
                 samples_width = <int>(4*ceil(max(s_padded[0], s_padded[1])))
                 if max_samples_width > 0 and samples_width > max_samples_width:
-                    target[yi,xi] = 0.0/0.0
+                    if singularities_nan:
+                        target[yi,xi] = nan
+                    else:
+                        target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic)
                     continue
                 for yoff in range(samples_width/2, -samples_width/2, -1):
                     current_offset[1] = yoff
                     current_pixel_source[1] = round(pixel_source[yi,xi,1] + yoff)
-                    if current_pixel_source[1] < 0:
-                        current_pixel_source[1] = 0
-                    elif current_pixel_source[1] >= source.shape[0]:
-                        current_pixel_source[1] = source.shape[0] - 1
                     for xoff in range(-samples_width/2, samples_width/2, 1):
                         current_offset[0] = xoff
                         current_pixel_source[0] = round(pixel_source[yi,xi,0] + xoff)
-                        if current_pixel_source[0] < 0:
-                            current_pixel_source[0] = 0
-                        elif current_pixel_source[0] >= source.shape[1]:
-                            current_pixel_source[0] = source.shape[1] - 1
                         transformed[0] = J[0,0] * current_offset[0] + J[0,1] * current_offset[1]
                         transformed[1] = J[1,0] * current_offset[0] + J[1,1] * current_offset[1]
                         weight = hanning_filter(transformed[0], transformed[1])
                         weight_sum += weight
-                        target[yi,xi] += weight * source[<int>current_pixel_source[1],<int>current_pixel_source[0]]
+                        target[yi,xi] += weight * nearest_neighbour_interpolation(source, current_pixel_source[0], current_pixel_source[1], x_cyclic, y_cyclic)
                 target[yi,xi] /= weight_sum
                 if conserve_flux:
                     target[yi,xi] *= fabs(det2x2(Ji))
