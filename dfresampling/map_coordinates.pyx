@@ -87,17 +87,21 @@ cdef double gaussian_filter(double x, double y) nogil:
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-cdef double clip(double x, double vmin, double vmax, int cyclic) nogil:
+cdef double clip(double x, double vmin, double vmax, int cyclic, int out_of_range_nan) nogil:
     if x < vmin:
         if cyclic:
             while x < vmin:
                 x += (vmax-vmin)+1
+        elif out_of_range_nan:
+            return nan
         else:
             return vmin
     elif x > vmax:
         if cyclic:
             while x > vmax:
                 x -= (vmax-vmin)+1
+        elif out_of_range_nan:
+            return nan
         else:
             return vmax
     else:
@@ -107,13 +111,17 @@ cdef double clip(double x, double vmin, double vmax, int cyclic) nogil:
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-cdef double bilinear_interpolation(double[:,:] source, double x, double y, int x_cyclic, int y_cyclic) nogil:
-    x = clip(x, 0, source.shape[1]-1, x_cyclic)
-    y = clip(y, 0, source.shape[0]-1, y_cyclic)
-    cdef double floored_x = clip(floor(x), 0, source.shape[1]-1, x_cyclic)
-    cdef double floored_y = clip(floor(y), 0, source.shape[0]-1, y_cyclic)
-    cdef double ceiled_x = clip(ceil(x), 0, source.shape[1]-1, x_cyclic)
-    cdef double ceiled_y = clip(ceil(y), 0, source.shape[0]-1, y_cyclic)
+cdef double bilinear_interpolation(double[:,:] source, double x, double y, int x_cyclic, int y_cyclic, int out_of_range_nan) nogil:
+    x = clip(x, 0, source.shape[1]-1, x_cyclic, out_of_range_nan)
+    y = clip(y, 0, source.shape[0]-1, y_cyclic, out_of_range_nan)
+    if isnan(x) or isnan(y):
+        return nan
+    cdef double floored_x = clip(floor(x), 0, source.shape[1]-1, x_cyclic, out_of_range_nan)
+    cdef double floored_y = clip(floor(y), 0, source.shape[0]-1, y_cyclic, out_of_range_nan)
+    cdef double ceiled_x = clip(ceil(x), 0, source.shape[1]-1, x_cyclic, out_of_range_nan)
+    cdef double ceiled_y = clip(ceil(y), 0, source.shape[0]-1, y_cyclic, out_of_range_nan)
+    if isnan(floored_x) or isnan(floored_y) or isnan(ceiled_x) or isnan(ceiled_y):
+        return nan
     cdef double Q11_x = floored_x
     cdef double Q11_y = floored_y
     cdef double Q21_x = ceiled_x
@@ -132,14 +140,18 @@ cdef double bilinear_interpolation(double[:,:] source, double x, double y, int x
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-cdef double nearest_neighbour_interpolation(double[:,:] source, double x, double y, int x_cyclic, int y_cyclic) nogil:
-    return source[<int>clip(round(y), 0, source.shape[0]-1, y_cyclic), <int>clip(round(x), 0, source.shape[1]-1, x_cyclic)]
+cdef double nearest_neighbour_interpolation(double[:,:] source, double x, double y, int x_cyclic, int y_cyclic, int out_of_range_nan) nogil:
+    y = clip(round(y), 0, source.shape[0]-1, y_cyclic, out_of_range_nan)
+    x = clip(round(x), 0, source.shape[1]-1, x_cyclic, out_of_range_nan)
+    if isnan(y) or isnan(x):
+        return nan
+    return source[<int>y, <int>x]
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-def map_coordinates_direct(double[:,:] source, double[:,:] target, Ci, int x_cyclic=False, int y_cyclic=False):
+def map_coordinates_direct(double[:,:] source, double[:,:] target, Ci, int x_cyclic=False, int y_cyclic=False, int out_of_range_nan=False):
     cdef np.ndarray[np.float64_t, ndim=3] pixel_target = np.zeros((target.shape[0], target.shape[1], 2))
     cdef int yi, xi
     for yi in range(target.shape[0]):
@@ -155,13 +167,13 @@ def map_coordinates_direct(double[:,:] source, double[:,:] target, Ci, int x_cyc
                 if isnan(pixel_source[yi,xi,0]) or isnan(pixel_source[yi,xi,1]):
                     target[yi,xi] = nan
                     continue
-                target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic)
+                target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic, out_of_range_nan)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_width=-1, int conserve_flux=False, int progress=False, int singularities_nan=False, int x_cyclic=False, int y_cyclic=False):
+def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_width=-1, int conserve_flux=False, int progress=False, int singularities_nan=False, int x_cyclic=False, int y_cyclic=False, int out_of_range_nan=False):
     cdef np.ndarray[np.float64_t, ndim=3] pixel_target = np.zeros((target.shape[0], target.shape[1], 2))
     # Offset in x direction
     cdef np.ndarray[np.float64_t, ndim=3] offset_target_x = np.zeros((target.shape[0], target.shape[1]+1, 2))
@@ -225,7 +237,7 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_
                     if singularities_nan:
                         target[yi,xi] = nan
                     else:
-                        target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic)
+                        target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic, out_of_range_nan)
                     continue
                 for yoff in range(samples_width/2, -samples_width/2, -1):
                     current_offset[1] = yoff
@@ -237,7 +249,7 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_
                         transformed[1] = J[1,0] * current_offset[0] + J[1,1] * current_offset[1]
                         weight = hanning_filter(transformed[0], transformed[1])
                         weight_sum += weight
-                        target[yi,xi] += weight * nearest_neighbour_interpolation(source, current_pixel_source[0], current_pixel_source[1], x_cyclic, y_cyclic)
+                        target[yi,xi] += weight * nearest_neighbour_interpolation(source, current_pixel_source[0], current_pixel_source[1], x_cyclic, y_cyclic, out_of_range_nan)
                 target[yi,xi] /= weight_sum
                 if conserve_flux:
                     target[yi,xi] *= fabs(det2x2(Ji))
