@@ -239,7 +239,7 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_
                     else:
                         target[yi,xi] = nearest_neighbour_interpolation(source, pixel_source[yi,xi,0], pixel_source[yi,xi,1], x_cyclic, y_cyclic, out_of_range_nan)
                     continue
-                for yoff in range(samples_width/2, -samples_width/2, -1):
+                for yoff in range(-samples_width/2, samples_width/2, 1):
                     current_offset[1] = yoff
                     current_pixel_source[1] = round(pixel_source[yi,xi,1] + yoff)
                     for xoff in range(-samples_width/2, samples_width/2, 1):
