@@ -1,13 +1,15 @@
 import numpy as np
-from dfresampling import map_coordinates
-from dfresampling.projections import partial, convert_hpc_pixel_to_polar_pixel, convert_polar_pixel_to_hpc_pixel
+from dfresampling import map_coordinates, map_coordinates_direct
+from dfresampling.projections import partial, convert_hpc_pixel_to_polar_pixel, convert_polar_pixel_to_hpc_pixel, convert_sin_hg_pixel_to_hpc_pixel
 import matplotlib.pyplot as plt
 import sunpy.map
 import sunpy.wcs
 import sunpy.cm
 from matplotlib import colors
+import matplotlib.cm
 from scipy.ndimage import uniform_filter, gaussian_filter1d
 import sys
+import skimage.io
 
 source_map = sunpy.map.Map(sunpy.AIA_171_IMAGE)
 polar_shape = ((1024, 512))
@@ -26,6 +28,7 @@ def normalizer(image):
 
 if __name__ == "__main__":
     source = source_map.data.astype(np.float64) / source_map.exposure_time
+    print source_map.date
     polar = np.zeros(polar_shape)
     cartesian = np.zeros((4096, 4096))
 
@@ -46,28 +49,20 @@ if __name__ == "__main__":
     plt.plot(x, median, label="Median")
     plt.plot(x, np.where(x < 0.96, gaussian_filter1d(median, sigma=8), median), label="Smoothed median")
     plt.legend(loc="best")
-    plt.show()
-    sys.exit()
-    profile = profile.reshape((1, profile.size))
-    print "Projecting to cartesian..."
-    map_coordinates(polar, cartesian, lambda x: cartesian_to_polar(scale4_backward(x)), max_samples_width=128)
-    cartesian[np.isnan(cartesian)] = 0
 
-    cartesian = uniform_filter(cartesian, size=4)[::4,::4]*16
+    plt.figure(figsize=(8,8))
+    vmin = 0
+    vmax = np.percentile(source, 99.9)
+    ax1 = plt.subplot(121)
+    ax1.set_title("Original")
+    ax1.imshow(source, vmin=vmin, vmax=vmax, cmap=sunpy.cm.get_cmap("sdoaia171"))
 
-    hpc_normalizer = normalizer(source)
-    polar_normalizer = normalizer(polar)
+    sin_hg = np.zeros((2048, 2048))
+    map_coordinates_direct(source, sin_hg, partial(convert_sin_hg_pixel_to_hpc_pixel, sin_hg.shape, (-90, 90), (-90, 90), scale, reference_pixel, reference_coordinate, source_map.heliographic_latitude, 0.0, source_map.dsun, "arcsec", True)) 
 
-    plt.figure(figsize=(8,4))
-    ax1 = plt.subplot(131)
-    plt.title("Original")
-    plt.imshow(hpc_normalizer(source), vmin=0, vmax=1, interpolation="nearest", cmap=sunpy.cm.get_cmap("sdoaia171"))
-    ax2 = plt.subplot(132)
-    plt.title("Polar projection")
-    plt.imshow(polar_normalizer(polar), vmin=0, vmax=1, interpolation="nearest", cmap=sunpy.cm.get_cmap("sdoaia171"))
-    ax3 = plt.subplot(133, sharex=ax1, sharey=ax1)
-    plt.title("Cartesian projection of polar image")
-    plt.imshow(hpc_normalizer(cartesian), vmin=0, vmax=1, interpolation="nearest", cmap=sunpy.cm.get_cmap("sdoaia171"))
+    ax2 = plt.subplot(122)
+    ax2.set_title("Sinusoidal projection")
+    ax2.imshow(sin_hg, vmin=vmin, vmax=vmax, cmap=sunpy.cm.get_cmap("sdoaia171"))
     plt.show()
 
-
+    skimage.io.imsave("test.png", matplotlib.cm.ScalarMappable(norm=colors.Normalize(vmin, vmax), cmap=sunpy.cm.get_cmap("sdoaia171")).to_rgba(sin_hg))

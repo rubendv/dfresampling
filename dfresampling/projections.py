@@ -46,6 +46,17 @@ def convert_hg_to_hpc(b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg)
     hpc[...,0], hpc[...,1] = sunpy.wcs.convert_hg_hpc(hg[...,0], hg[...,1], b0_deg, l0_deg, dsun_meters, angle_units, occultation)
     return hpc
 
+def convert_sin_hg_to_hg(sin_hg):
+    hg = np.zeros_like(sin_hg)
+    hg[...,0] = sin_hg[...,0]/np.cos(np.deg2rad(sin_hg[...,1]))
+    hg[...,1] = sin_hg[...,1]
+    return hg
+
+def convert_hg_to_sin_hg(hg):
+    sin_hg = np.zeros_like(sin_hg)
+    sin_hg[...,0] = hg[...,0]*np.cos(np.deg2rad(hg[...,1]))
+    sin_hg[...,1] = hg[...,1]
+
 def convert_hpc_to_hg(b0_deg, l0_deg, dsun_meters, angle_units, hpc):
     hg = np.zeros_like(hpc)
     hg[...,0], hg[...,1] = sunpy.wcs.convert_hpc_hg(hpc[...,0], hpc[...,1], b0_deg, l0_deg, dsun_meters, angle_units)
@@ -70,4 +81,11 @@ def convert_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, sca
     return compose(\
             partial(convert_hpc_to_pixel, scale, reference_pixel, reference_coordinate), \
             partial(convert_hg_to_hpc, b0_deg, l0_deg, dsun_meters, angle_units, occultation), \
+            partial(convert_range, (0, hg_shape[1]), longitude_range, (0, hg_shape[0]), latitude_range))(hg_pixel)
+
+def convert_sin_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg_pixel):
+    return compose(\
+            partial(convert_hpc_to_pixel, scale, reference_pixel, reference_coordinate), \
+            partial(convert_hg_to_hpc, b0_deg, l0_deg, dsun_meters, angle_units, occultation), \
+            convert_sin_hg_to_hg, \
             partial(convert_range, (0, hg_shape[1]), longitude_range, (0, hg_shape[0]), latitude_range))(hg_pixel)
