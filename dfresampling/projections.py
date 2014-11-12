@@ -49,7 +49,9 @@ def convert_hg_to_hpc(b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg)
 def convert_sin_hg_to_hg(sin_hg):
     hg = np.zeros_like(sin_hg)
     hg[...,0] = sin_hg[...,0]/np.cos(np.deg2rad(sin_hg[...,1]))
+    hg[(hg < -180) | (hg > 180)] = np.nan
     hg[...,1] = sin_hg[...,1]
+    
     return hg
 
 def convert_hg_to_sin_hg(hg):

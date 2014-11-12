@@ -55,14 +55,14 @@ if __name__ == "__main__":
     vmax = np.percentile(source, 99.9)
     ax1 = plt.subplot(121)
     ax1.set_title("Original")
-    ax1.imshow(source, vmin=vmin, vmax=vmax, cmap=sunpy.cm.get_cmap("sdoaia171"))
+    ax1.imshow(source, vmin=vmin, vmax=vmax, cmap=sunpy.cm.get_cmap("sdoaia171"), interpolation="nearest")
 
-    sin_hg = np.zeros((2048, 2048))
-    map_coordinates_direct(source, sin_hg, partial(convert_sin_hg_pixel_to_hpc_pixel, sin_hg.shape, (-90, 90), (-90, 90), scale, reference_pixel, reference_coordinate, source_map.heliographic_latitude, 0.0, source_map.dsun, "arcsec", True)) 
+    sin_hg = np.zeros((1024, 1024))
+    map_coordinates(source, sin_hg, partial(convert_sin_hg_pixel_to_hpc_pixel, sin_hg.shape, (-90, 90), (-90, 90), scale, reference_pixel, reference_coordinate, source_map.heliographic_latitude, 0.0, source_map.dsun, "arcsec", True), progress=True) 
 
     ax2 = plt.subplot(122)
     ax2.set_title("Sinusoidal projection")
-    ax2.imshow(sin_hg, vmin=vmin, vmax=vmax, cmap=sunpy.cm.get_cmap("sdoaia171"))
+    ax2.imshow(sin_hg, vmin=vmin, vmax=vmax, cmap=sunpy.cm.get_cmap("sdoaia171"), interpolation="nearest")
     plt.show()
 
     skimage.io.imsave("test.png", matplotlib.cm.ScalarMappable(norm=colors.Normalize(vmin, vmax), cmap=sunpy.cm.get_cmap("sdoaia171")).to_rgba(sin_hg))
