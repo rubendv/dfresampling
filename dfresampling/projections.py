@@ -79,15 +79,23 @@ def convert_hpc_pixel_to_hg_pixel(hg_shape, longitude_range, latitude_range, sca
             partial(convert_hpc_to_hg, b0_deg, l0_deg, dsun_meters, angle_units), \
             partial(convert_pixel_to_hpc, scale, reference_pixel, reference_coordinate))(hpc_pixel)
 
-def convert_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg_pixel):
+def convert_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, angle, hg_pixel):
     return compose(\
             partial(convert_hpc_to_pixel, scale, reference_pixel, reference_coordinate), \
+            partial(rotate, -angle), \
             partial(convert_hg_to_hpc, b0_deg, l0_deg, dsun_meters, angle_units, occultation), \
             partial(convert_range, (0, hg_shape[1]), longitude_range, (0, hg_shape[0]), latitude_range))(hg_pixel)
 
-def convert_sin_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, hg_pixel):
+def rotate(angle, coords):
+    rotated = np.zeros_like(coords)
+    rotated[...,0] = coords[...,0]*np.cos(angle) - coords[...,1]*np.sin(angle)
+    rotated[...,1] = coords[...,0]*np.sin(angle) + coords[...,1]*np.cos(angle)
+    return rotated
+
+def convert_sin_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, angle, hg_pixel):
     return compose(\
             partial(convert_hpc_to_pixel, scale, reference_pixel, reference_coordinate), \
+            partial(rotate, -angle), \
             partial(convert_hg_to_hpc, b0_deg, l0_deg, dsun_meters, angle_units, occultation), \
             convert_sin_hg_to_hg, \
             partial(convert_range, (0, hg_shape[1]), longitude_range, (0, hg_shape[0]), latitude_range))(hg_pixel)
