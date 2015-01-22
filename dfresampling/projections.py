@@ -86,10 +86,11 @@ def convert_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, sca
             partial(convert_hg_to_hpc, b0_deg, l0_deg, dsun_meters, angle_units, occultation), \
             partial(convert_range, (0, hg_shape[1]), longitude_range, (0, hg_shape[0]), latitude_range))(hg_pixel)
 
-def rotate(angle, coords):
+def rotate(angle_degrees, coords):
+    angle_rad = np.deg2rad(angle_degrees)
     rotated = np.zeros_like(coords)
-    rotated[...,0] = coords[...,0]*np.cos(angle) - coords[...,1]*np.sin(angle)
-    rotated[...,1] = coords[...,0]*np.sin(angle) + coords[...,1]*np.cos(angle)
+    rotated[...,0] = coords[...,0]*np.cos(angle_rad) - coords[...,1]*np.sin(angle_rad)
+    rotated[...,1] = coords[...,0]*np.sin(angle_rad) + coords[...,1]*np.cos(angle_rad)
     return rotated
 
 def convert_sin_hg_pixel_to_hpc_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, occultation, angle, hg_pixel):
