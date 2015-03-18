@@ -249,7 +249,7 @@ def map_coordinates(double[:,:] source, double[:,:] target, Ci, int max_samples_
                         transformed[1] = J[1,0] * current_offset[0] + J[1,1] * current_offset[1]
                         weight = hanning_filter(transformed[0], transformed[1])
                         weight_sum += weight
-                        target[yi,xi] += weight * bilinear_interpolation(source, current_pixel_source[0], current_pixel_source[1], x_cyclic, y_cyclic, out_of_range_nan)
+                        target[yi,xi] += weight * nearest_neighbour_interpolation(source, current_pixel_source[0], current_pixel_source[1], x_cyclic, y_cyclic, out_of_range_nan)
                 target[yi,xi] /= weight_sum
                 if conserve_flux:
                     target[yi,xi] *= fabs(det2x2(Ji))
