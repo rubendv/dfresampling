@@ -55,9 +55,18 @@ def convert_sin_hg_to_hg(sin_hg):
     return hg
 
 def convert_hg_to_sin_hg(hg):
-    sin_hg = np.zeros_like(sin_hg)
+    sin_hg = np.zeros_like(hg)
     sin_hg[...,0] = hg[...,0]*np.cos(np.deg2rad(hg[...,1]))
     sin_hg[...,1] = hg[...,1]
+    return sin_hg
+
+def convert_hpc_pixel_to_sin_hg_pixel(hg_shape, longitude_range, latitude_range, scale, reference_pixel, reference_coordinate, b0_deg, l0_deg, dsun_meters, angle_units, angle, hpc_pixel):
+    return compose(\
+        partial(convert_range, longitude_range, (0, hg_shape[1]), latitude_range, (0, hg_shape[0])), \
+        partial(convert_hg_to_sin_hg), \
+        partial(convert_hpc_to_hg, b0_deg, l0_deg, dsun_meters, angle_units), \
+        partial(rotate, angle), \
+        partial(convert_pixel_to_hpc, scale, reference_pixel, reference_coordinate))(hpc_pixel)
 
 def convert_hpc_to_hg(b0_deg, l0_deg, dsun_meters, angle_units, hpc):
     hg = np.zeros_like(hpc)
