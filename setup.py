@@ -13,5 +13,6 @@ setup(
    author = "Ruben De Visscher",
    cmdclass={'build_ext' : build_ext}, 
    include_dirs = [np.get_include()],   
-   ext_modules=ext
+   ext_modules=ext,
+   packages=['dfresampling']
 )
